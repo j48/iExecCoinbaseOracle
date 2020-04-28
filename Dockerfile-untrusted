@@ -1,0 +1,10 @@
+FROM python:3.7-alpine3.10
+
+RUN apk --no-cache add --virtual .builddeps gcc musl-dev
+RUN pip install requests web3
+RUN apk del .builddeps
+RUN rm -rf /root/.cache
+
+COPY app/oracle-sandbox.py /app/oracle.py
+
+ENTRYPOINT ["python3", "/app/oracle.py"]
