@@ -139,7 +139,7 @@ def main(coin):
 
     api_types = ['string', 'uint256', 'string', 'uint256']
 
-    # currently API just returns BTC/ETH values in same call
+    # currently API just returns values in same call
     url = COINBASE_ORACLE_URL + '/oracle'
     stdout_print(f"oracle API URL: {url}")
 
@@ -195,38 +195,38 @@ def main(coin):
 
             else:
                 stdout_print(f"*MESSAGE FAILED VERIFICATION*")
-
+        else:
+            stdout_print(f"*COIN NOT FOUND*")
     else:
         stdout_print(f"API error ({r.status_code})")
+
+    return False
 
 
 # user input "ETH" or "BTC"
 if __name__ == "__main__":
-    valid_input = ['BTC', 'ETH']
-    callback = None
+    valid_input = ['BTC', 'ETH', 'DAI', 'REP', 'ZRX', 'BAT', 'KNC', 'LINK']
 
     user_input = sys.argv[1] if len(sys.argv) > 1 else None
 
-    stdout_print(f"user input: {user_input}")
-
     if user_input:
+        stdout_print(f"user input: {user_input}")
         if user_input.upper() in valid_input:
             callback = main(user_input)
+            if callback:
+                stdout_print(f"callback: {callback}")
+                stdout_print(f"writing callback...")
+                write_callback(callback, f'{output_dir}{callback_file}')
+
+                stdout_print(f"writing determinism...")
+                write_determinism(f'{output_dir}{determinism_file}', callback)
+            else:
+                stdout_print(f"no callback generated")
+                stdout_print(f"writing determinism...")
+                write_determinism(f'{output_dir}{determinism_file}')
         else:
-            stdout_print("invalid user input, enter 'BTC' or 'ETH'")
+            stdout_print(f"invalid user input, enter {valid_input}")
     else:
         stdout_print("no user input found")
-
-    if callback:
-        stdout_print(f"callback: {callback}")
-        stdout_print(f"writing callback...")
-        write_callback(callback, f'{output_dir}{callback_file}')
-
-        stdout_print(f"writing determinism...")
-        write_determinism(f'{output_dir}{determinism_file}', callback)
-    else:
-        stdout_print(f"no callback generated")
-        stdout_print(f"writing determinism...")
-        write_determinism(f'{output_dir}{determinism_file}')
 
     stdout_print("DONE!")
