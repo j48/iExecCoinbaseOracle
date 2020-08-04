@@ -17,6 +17,8 @@ coinbase_url = 'https://api.pro.coinbase.com/oracle'
 coinbase_public_key = '0xfCEAdAFab14d46e20144F48824d0C09B1a03F2BC'
 coinbase_coins = ['BTC', 'ETH', 'DAI', 'REP', 'ZRX', 'BAT', 'KNC', 'LINK']
 
+openoracle_abi_types = ['string', 'uint256', 'string', 'uint256']
+
 iexec_root = '/'
 iexec_in = os.getenv('IEXEC_IN') or f'{iexec_root}iexec_in'
 iexec_out = os.getenv('IEXEC_OUT') or f'{iexec_root}iexec_out'
@@ -160,7 +162,7 @@ if __name__ == "__main__":
 
         for i, message in enumerate(coinbase_api.result['messages']):
             message_bytes = Web3.toBytes(hexstr=message)
-            message_decoded = eth_abi.decode_abi(['string', 'uint256', 'string', 'uint256'], message_bytes)
+            message_decoded = eth_abi.decode_abi(openoracle_abi_types, message_bytes)
 
             coin_decoded = message_decoded[2].upper()
 
@@ -170,6 +172,7 @@ if __name__ == "__main__":
             ecdsa_signature = coinbase_api.result['signatures'][i]
 
             if not verify_signature(message, ecdsa_signature, coinbase_api.public_key):
+                callback = create_callback(message, "0x0")  # return invalid sig?
                 raise Exception("*INVALID SIGNATURE FOR API RESULT*")
 
             stdout_print(f"*verified API result for {coin}*")
@@ -181,7 +184,11 @@ if __name__ == "__main__":
         stdout_print(f"ERROR: {error}")
 
     if not callback:
-        callback = create_callback("0x0", "0x0")
+        # general error
+        error_args = ("error", 0, "", 0)
+        error_bytes = eth_abi.encode_abi(openoracle_abi_types, error_args)
+        error_hex = Web3.toHex(error_bytes)
+        callback = create_callback(error_hex, "0x0")
 
     stdout_print(f"callback: {callback}")
     stdout_print(f"updating compute JSON with callback...")
