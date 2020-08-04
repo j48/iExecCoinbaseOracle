@@ -51,7 +51,7 @@ contract PriceOracle is Ownable, IexecDoracle{
 
 	  }
 	
-	  function get(string calldata key) external view returns (uint64, uint64) {
+	function get(string calldata key) external view returns (uint64, uint64) {
         Datum storage datum = data[key];
         return (datum.timestamp, datum.value);
     }
