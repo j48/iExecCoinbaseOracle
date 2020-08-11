@@ -12,17 +12,9 @@ from web3 import Web3
 from web3.auto import w3
 from contextlib import redirect_stdout
 
-# https://docs.pro.coinbase.com/#recovering-signatory
-coinbase_url = 'https://api.pro.coinbase.com/oracle'
-coinbase_public_key = '0xfCEAdAFab14d46e20144F48824d0C09B1a03F2BC'
-coinbase_coins = ['BTC', 'ETH', 'DAI', 'REP', 'ZRX', 'BAT', 'KNC', 'LINK']
-
-openoracle_abi_types = ['string', 'uint256', 'string', 'uint256']
-
-iexec_root = '/'
-iexec_in = os.getenv('IEXEC_IN') or f'{iexec_root}iexec_in'
-iexec_out = os.getenv('IEXEC_OUT') or f'{iexec_root}iexec_out'
-iexec_dataset_filename = os.getenv('IEXEC_DATASET_FILENAME') or 'coinbase_api_key.json'
+iexec_in = os.getenv('IEXEC_IN')
+iexec_out = os.getenv('IEXEC_OUT')
+iexec_dataset_filename = 'coinbase_api_key.json'
 iexec_computed_filename = 'computed.json'
 iexec_stdout_filename = 'log.txt'
 
@@ -30,14 +22,16 @@ iexec_stdout_filename = 'log.txt'
 # https://developers.coinbase.com/api/v2?shell#api-key
 class CoinbaseProSignedAPI:
 
+    coins = ['BTC', 'ETH', 'DAI', 'REP', 'ZRX', 'BAT', 'KNC', 'LINK']
+
+    # https://docs.pro.coinbase.com/#recovering-signatory
+    url = 'https://api.pro.coinbase.com/oracle'
+    public_key = '0xfCEAdAFab14d46e20144F48824d0C09B1a03F2BC'
+
     def __init__(self, key, secret, passphrase):
         self.key = key
         self.secret = secret
         self.passphrase = passphrase
-
-        self.public_key = coinbase_public_key
-        self.url = coinbase_url
-        self.coins = coinbase_coins
 
         self.result = {}
         self.error = None
@@ -68,21 +62,43 @@ class CoinbaseProSignedAPI:
                     if 'messages' and 'signatures' in result.json():
                         self.result = result.json()
                     else:
-                        self.error = 'API result JSON incomplete, must include messages and signatures'
+                        self.error = 7
                 else:
-                    self.error = f"API error status code ({result.status_code})"
+                    self.error = 6
             except (Exception, ConnectionError) as e:
-                self.error = e
+                self.error = 8
         else:
-            self.error = f"invalid coin, choose from {self.coins}"
+            self.error = 5
+
+
+class ErrorCallback(Exception):
+    # codes for callback, messages for debug
+    messages = {
+        1: 'no user input found',
+        2: 'credentials file not found or corrupted',
+        3: 'invalid dataset format',
+        4: 'credentials incomplete',
+        5: 'invalid coin',
+        6: 'non 200 API error status code',
+        7: 'API result JSON incomplete, must include messages and signatures',
+        8: 'general API error',
+        9: 'invalid signature',
+        11: 'coin not in API results'
+    }
+
+    def __init__(self, code):
+        self.code = code
+        self.msg = self.messages[self.code]
+
+    def __str__(self):
+        return repr(self.msg)
 
 
 def create_callback(msg_hex, sig_hex):
     msg_bytes = Web3.toBytes(hexstr=msg_hex)
     sig_bytes = Web3.toBytes(hexstr=sig_hex)
-    ec_recover_types = ['bytes', 'bytes']
     ec_recover_args = (msg_bytes, sig_bytes)
-    encoded_abi = eth_abi.encode_abi(ec_recover_types, ec_recover_args)
+    encoded_abi = eth_abi.encode_abi(['bytes', 'bytes'], ec_recover_args)
 
     return Web3.toHex(encoded_abi)
 
@@ -101,19 +117,23 @@ def write_callback(cb, loc):
         json.dump(compute_json, file, indent=2)
 
 
-def read_credentials_file(f):
+def read_dataset_file(dsf, kind='json'):
     try:
-        with open(f, 'r') as file:
-            try:
-                credentials_file = json.load(file)
-                if 'key' and 'secret' and 'passphrase' in credentials_file:
-                    return credentials_file
-                else:
-                    return {'error': 'credentials incomplete'}
-            except (Exception, TypeError):
-                return {'error': 'invalid credentials JSON format'}
+        with open(dsf, 'r') as dataset_file:
+            if kind == 'json':
+                return json.load(dataset_file)
+            else:
+                return {'error': 3}
     except (Exception, FileNotFoundError):
-        return {'error': 'credentials file not found'}
+        return {'error': 2}
+
+
+def process_dataset(cj):
+    try:
+        keys = {'key': cj['key'], 'secret': cj['secret'], 'passphrase': cj['passphrase']}
+        return keys
+    except KeyError:
+        return {'error': 4}
 
 
 def verify_signature(msg_hex, sig_hex, verify_signer):
@@ -137,20 +157,30 @@ def stdout_print(txt):
 
 if __name__ == "__main__":
     stdout_print(f"STARTING - {str(time.time())}")
-    user_input = sys.argv[1] if len(sys.argv) > 1 else None
+
+    try:
+        user_input = sys.argv[1]
+    except IndexError:
+        user_input = None
+
     stdout_print(f"user input: {user_input}")
 
-    # modified for v5 & ERC2362, stdout/log for TEE is optional
+    # modified for v5 & ERC2362, stdout/log for TEE for debug, error code for callback
     callback = None
 
     try:
         if not user_input:
-            raise Exception("no user input found")
+            raise ErrorCallback(1)
 
-        credentials = read_credentials_file(f"{iexec_in}/{iexec_dataset_filename}")
+        dataset = read_dataset_file(f"{iexec_in}/{iexec_dataset_filename}", 'json')
+
+        if 'error' in dataset:
+            raise ErrorCallback(dataset['error'])
+
+        credentials = process_dataset(dataset)
 
         if 'error' in credentials:
-            raise Exception(credentials['error'])
+            raise ErrorCallback(credentials['error'])
 
         coinbase_api = CoinbaseProSignedAPI(credentials['key'], credentials['secret'], credentials['passphrase'])
 
@@ -158,11 +188,11 @@ if __name__ == "__main__":
         coinbase_api.call(coin)
 
         if coinbase_api.error:
-            raise Exception(coinbase_api.error)
+            raise ErrorCallback(coinbase_api.error)
 
         for i, message in enumerate(coinbase_api.result['messages']):
             message_bytes = Web3.toBytes(hexstr=message)
-            message_decoded = eth_abi.decode_abi(openoracle_abi_types, message_bytes)
+            message_decoded = eth_abi.decode_abi(['string', 'uint256', 'string', 'uint256'], message_bytes)
 
             coin_decoded = message_decoded[2].upper()
 
@@ -173,25 +203,26 @@ if __name__ == "__main__":
 
             if not verify_signature(message, ecdsa_signature, coinbase_api.public_key):
                 callback = create_callback(message, "0x0")  # return invalid sig?
-                raise Exception("*INVALID SIGNATURE FOR API RESULT*")
+                raise ErrorCallback(9)
 
-            stdout_print(f"*verified API result for {coin}*")
+            stdout_print(f"*verified API result for {coin} found*")
 
             callback = create_callback(message, ecdsa_signature)
             break
 
-    except Exception as error:
-        stdout_print(f"ERROR: {error}")
+        if not callback:
+            raise ErrorCallback(11)
 
-    if not callback:
-        # general error
-        error_args = ("error", 0, "", 0)
-        error_bytes = eth_abi.encode_abi(openoracle_abi_types, error_args)
+    except ErrorCallback as e_callback:
+        stdout_print(f"ERROR ({e_callback.code}): {e_callback}")
+
+        error_args = ("error", 0, "", e_callback.code)
+        error_bytes = eth_abi.encode_abi(['string', 'uint256', 'string', 'uint256'], error_args)
         error_hex = Web3.toHex(error_bytes)
+
         callback = create_callback(error_hex, "0x0")
 
     stdout_print(f"callback: {callback}")
-    stdout_print(f"updating compute JSON with callback...")
 
     write_callback(callback, f'{iexec_out}/{iexec_computed_filename}')
 
