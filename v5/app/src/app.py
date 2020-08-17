@@ -22,7 +22,7 @@ iexec_stdout_filename = 'log.txt'
 # https://developers.coinbase.com/api/v2?shell#api-key
 class CoinbaseProSignedAPI:
 
-    coins = ['BTC', 'ETH', 'DAI', 'REP', 'ZRX', 'BAT', 'KNC', 'LINK']
+    coins = ['BTC', 'ETH', 'DAI', 'REP', 'ZRX', 'BAT', 'KNC', 'LINK', 'COMP']
 
     # https://docs.pro.coinbase.com/#recovering-signatory
     url = 'https://api.pro.coinbase.com/oracle'
