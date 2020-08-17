@@ -1,7 +1,7 @@
 FROM sconecuratedimages/public-apps:python-3.7.3-alpine3.10-scone3.0
 
 ### install some python3 dependencies
-RUN apk add gcc
+RUN apk add gcc libc-dev
 RUN SCONE_MODE=sim pip3 install requests web3
 
 ### copy the code inside the image
