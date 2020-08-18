@@ -7,7 +7,6 @@ import "@iexec/solidity/contracts/ERC1154/IERC1154.sol";
 import "@iexec/solidity/contracts/ERC2362/IERC2362.sol";
 import "@iexec/doracle/contracts/IexecDoracle.sol";
 
-// Edited for only testing/demo purposes
 contract PriceOracle is IexecDoracle, Ownable, IOracleConsumer, IERC2362
 {
 	event Update(bytes32 indexed oracleCallID, string indexed key, uint64 timestamp, uint64 value);
